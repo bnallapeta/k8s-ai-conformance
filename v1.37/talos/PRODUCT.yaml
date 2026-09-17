@@ -84,5 +84,5 @@ spec:
       status: "Implemented"
       evidence:
         - "https://docs.siderolabs.com/kubernetes-guides/advanced-guides/kuberay"
-        - "https://github.com/cncf/k8s-conformance/pull/3718"
+        - "https://github.com/cncf/k8s-conformance/pull/4389"
       notes: "Talos Linux uses a vanilla, conformant Kubernetes cluster. Frameworks such as Ray and Kubeflow have been tested and are used on clusters implemented on Talos Linux and Omni."
