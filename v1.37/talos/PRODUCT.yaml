@@ -45,7 +45,8 @@ spec:
       description: "If the platform provides a cluster autoscaler or an equivalent mechanism, it must be able to scale up/down node groups containing specific accelerator types based on pending pods requesting those accelerators."
       level: MUST
       status: "N/A"
-      evidence: "N/A"
+      evidence:
+        - "N/A"
       notes: "Talos Linux works with customer provided machines. In a cloud or virtualized environment autoscalers such as the Kubernetes cluster autoscaler can be used, but it is not required and does not work for edge or on-premesis infrastructure."
     - id: pod_autoscaling
       description: "If the platform supports the HorizontalPodAutoscaler, it must function correctly for pods utilizing accelerators. This includes the ability to scale these Pods based on custom metrics relevant to AI/ML workloads."
@@ -59,13 +60,15 @@ spec:
       description: "For supported accelerator types, the platform must allow for the installation and successful operation of at least one accelerator metrics solution that exposes fine-grained performance metrics via a standardized, machine-readable metrics endpoint. This must include a core set of metrics for per-accelerator utilization and memory usage. Additionally, other relevant metrics such as temperature, power draw, and interconnect bandwidth should be exposed if the underlying hardware or virtualization layer makes them available. The list of metrics should align with emerging standards, such as OpenTelemetry metrics, to ensure interoperability. The platform may provide a managed solution, but this is not required for conformance."
       level: MUST
       status: "N/A"
-      evidence: "N/A"
+      evidence:
+        - "N/A"
       notes: "Kubernetes cluster managed by Talos linux and Omni support deploying DCGM (NVIDIA), but they do not provide integrated workload deployment, monitoring, or observability."
     - id: ai_service_metrics
       description: "Provide a monitoring system capable of discovering and collecting metrics from workloads that expose them in a standard format (e.g. Prometheus exposition format). This ensures easy integration for collecting key metrics from common AI frameworks and servers."
       level: MUST
       status: "N/A"
-      evidence: "N/A"
+      evidence:
+        - "N/A"
       notes: "Talos Linux allows for a variety of monitoring tools to be installed in the clusters, but it does not have access to Kubernetes workloads and does not scrape metrics directly."
   security:
     - id: secure_accelerator_access
