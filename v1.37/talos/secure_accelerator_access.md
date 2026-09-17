@@ -1,164 +1,50 @@
-# Omni Secure Accelerator Access
+# Secure Accelerator Access on Talos Linux
 
-**MUST**: Ensure that access to accelerators from within containers is properly isolated and mediated by the Kubernetes resource management framework (device plugin or DRA) and container runtime, preventing unauthorized access or interference between workloads.
+**MUST**: Ensure that access to accelerators from within containers is
+properly isolated and mediated by the Kubernetes resource management framework
+(device plugin or DRA) and container runtime, preventing unauthorized access
+or interference between workloads.
 
-## Tests
+## Automated verification
 
-### Test 1: Verify Isolated GPU Access via Device Plugin
+This requirement is verified end-to-end by the upstream
+[AI Conformance test suite](https://github.com/kubernetes-sigs/ai-conformance)
+in the same submission directory:
 
-**Step 1**: Prepare the test environment, including:
+- **`junit.xml#TestSecureAcceleratorAccess`** — machine-readable JUnit results
+- **`e2e.log`** — full human-readable log
+- **`results.json`** — Go-test JSON events for CI ingestion
 
-- Create a Kubernetes 1.33 cluster
-- [Add a GPU node and install the NVIDIA device plugin](https://docs.siderolabs.com/talos/v1.11/configure-your-talos-cluster/hardware-and-drivers/nvidia-gpu-proprietary)
+The test suite auto-detects the allocation mode (DRA vs device-plugin) and
+runs both positive and negative sub-tests:
 
-**Step 2 [Accessible]**: Deploy a Pod on a node with available accelerator(s), and ensure the container within the Pod explicitly requests accelerator resources.
+| Sub-test | What it proves |
+| --- | --- |
+| `TestSecureAcceleratorAccess/PositiveAccessTest` | A pod that requests one accelerator via the platform's resource-management framework (DRA `ResourceClaim` on this cluster) is scheduled and observes exactly one accelerator device from inside the container. |
+| `TestSecureAcceleratorAccess/NegativeIsolationTest` | A pod that does **not** request an accelerator is scheduled but observes **zero** accelerator devices — no device files leak in, no driver access is granted. |
 
-```bash
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: gpu-accessible
-  namespace: kube-system
-spec:
-  containers:
-  - name: cuda-container
-    image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubuntu20.04
-    command: ["sleep", "3600"]
-    resources:
-      limits:
-        nvidia.com/gpu: 1
-  restartPolicy: Never
-  runtimeClassName: nvidia
-EOF
-```
+Both sub-tests passed against the two-node Talos Linux v1.14.1 / Kubernetes
+v1.37.0 cluster described in this submission.
 
-Validate the GPU is available
+## Cluster configuration verified
 
-```bash
-kubectl exec gpu-test-accessible -- nvidia-smi -L
-GPU 0: Quadro P1000 (UUID: GPU-ca8f98c8-e647-af32-3402-a255bc380664)
-```
+The submission was collected on:
 
-**Expected Result**: The command should successfully return the GPU information.
+- **Control plane**: Raspberry Pi 5 (arm64, no accelerator)
+- **Worker**: NVIDIA DGX Spark GB10 (arm64, single GPU exposed as
+  `gpu.nvidia.com` via the [NVIDIA DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu))
 
-**Step 3 [Isolation]**: Deploy two Pods on the same node, each requesting different GPU resources. Verify that only 1 pod is scheduled if only 1 GPU is available on the node or each pod only has access to the GPU it requested.
+Isolation on Talos Linux is enforced by three cooperating layers:
 
-```bash
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: gpu-pod1
-  namespace: kube-system
-spec:
-  containers:
-  - name: cuda-container
-    image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubuntu20.04
-    command: ["sleep", "3600"]
-    resources:
-      limits:
-        nvidia.com/gpu: 1
-    env:
-    - name: CUDA_VISIBLE_DEVICES
-      value: "0"
-  restartPolicy: Never
-  runtimeClassName: nvidia
-EOF
-```
-Deploy second workload
+1. **The signed `nvidia-container-toolkit-production` system extension**
+   provides the runtime hooks that mount `/dev/nvidia*` devices only when a
+   Container Device Interface (CDI) claim exists for the container.
+2. **The NVIDIA DRA driver** allocates individual GPU devices to pods that
+   hold a `ResourceClaim` and rejects overlapping claims from unrelated pods.
+3. **Talos Linux itself** is immutable and configured entirely through
+   declarative machine config; there is no host-level SSH or shell to bypass
+   the container runtime and manually attach a GPU to a pod.
 
-```bash
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata
-  name: gpu-pod2
-  namespace: kube-system
-spec:
-  containers:
-  - name: cuda-container
-    image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubuntu20.04
-    command: ["sleep", "3600"]
-    resources:
-      limits:
-        nvidia.com/gpu: 1
-    env:
-    - name: CUDA_VISIBLE_DEVICES
-      value: "1"
-  restartPolicy: Never
-  runtimeClassName: nvidia
-EOF
-```
-
-Verify isolation - each Pod should only see its allocated GPU
-
-```bash
-kubectl exec gpu-pod1 -- nvidia-smi -L
-GPU 0: Quadro P1000 (UUID: GPU-ca8f98c8-e647-af32-3402-a255bc380664)
-```
-
-If only 1 GPU is available the second pod will not be scheduled.
-```bash
-kubectl describe po gpu-pod2 | grep FailedScheduling
-Warning  FailedScheduling  10m    default-scheduler  0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 Insufficient nvidia.com/gpu. no new claims to deallocate, preemption: 0/3 nodes are available: 1 No preemption victims found for incoming pod, 2 Preemption is not helpful for scheduling.
-```
-
-If 2 GPUs are available on the node then the 2nd pod shows the GPU it has access to.
-```bash
-kubectl exec gpu-pod2 -- nvidia-smi -L
-GPU 0: Quadro P1000 (UUID: GPU-4b85a003-881c-4eb8-bea2-014b0ed809d1)
-```
-
-**Expected Result**: Each Pod should only see and be able to access its allocated GPU. The CUDA_VISIBLE_DEVICES environment variable and the device plugin should ensure proper isolation between workloads.
-
-### Test 2: Verify Unauthorized Access Prevention
-
-**Step 1**: Deploy a Pod without GPU resource requests and verify that it cannot access GPU devices directly.
-
-```bash
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: gpu-unauthorized
-  namespace: default
-spec:
-  containers:
-  - name: cuda-container
-    image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubuntu20.04
-    command: ["sleep", "3600"]
-  restartPolicy: Never
-EOF
-```
-
-Attempt to access GPU - this should fail
-
-```bash
-kubectl exec gpu-unauthorized -- nvidia-smi
-OCI runtime exec failed: exec failed: unable to start container process: exec: "nvidia-smi": executable file not found in $PATH: unknown.
-```
-
-**Expected Result**: The Pod without GPU resource requests should not have access to GPU devices. The nvidia-smi command should fail, demonstrating that the device plugin properly mediates access.
-
-**Step 2**: Verify that containers cannot bypass the device plugin by accessing GPU devices directly through device files.
-
-```bash
-kubectl exec gpu-unauthorized -- ls -la /dev/nvidia*
-ls: cannot access '/dev/nvidia0': No such file or directory
-ls: cannot access '/dev/nvidia-caps': No such file or directory
-ls: cannot access '/dev/nvidiactl': No such file or directory
-ls: cannot access '/dev/nvidia-modeset': No such file or directory
-ls: cannot access '/dev/nvidia-uvm': No such file or directory
-ls: cannot access '/dev/nvidia-uvm-tools': No such file or directory
-command terminated with exit code 2
-```
-
-Verify that the container runtime has not mounted GPU devices
-
-```bash
-$ kubectl exec gpu-test-unauthorized -- ls -la /dev/ | grep nvidia
-# empty
-```
-
-**Expected Result**: GPU device files should not be available in containers that haven't requested GPU resources through the Kubernetes resource management framework.
+Together these make it impossible for a pod without a DRA claim to see or
+touch a GPU device on this cluster, which is what the automated negative
+isolation test verifies.

@@ -76,6 +76,7 @@ spec:
         - "https://docs.siderolabs.com/kubernetes-guides/advanced-guides/kueue"
         - "junit.xml"
         - "e2e.log"
+        - "results.json"
       notes: "Verified end-to-end by the upstream AI Conformance test suite (TestGangScheduling) using Kueue v0.19.4 with a LocalQueue for admission. Positive and negative cases both pass."
     - id: cluster_autoscaling
       description: "If the platform provides a cluster autoscaler or an equivalent mechanism, it must be able to scale up/down node groups containing specific accelerator types based on pending pods requesting those accelerators."
@@ -83,7 +84,7 @@ spec:
       status: "Implemented"
       evidence:
         - "https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler"
-      notes: "Talos Linux is deployable on cloud and virtualization platforms that support the upstream Kubernetes cluster-autoscaler (AWS, GCP, Azure, Hetzner, Proxmox, etc.). For those environments the standard cluster-autoscaler component runs unmodified against Talos-managed nodes and reacts to Pending pods that request accelerator resources. Bare-metal deployments do not exercise this path; there the requirement is satisfied by the ability to scale worker MachineSets via Omni's declarative cluster template."
+      notes: "Talos Linux is deployable on cloud and virtualization platforms that support the upstream Kubernetes cluster-autoscaler (AWS, GCP, Azure, Hetzner, Proxmox, etc.). For those environments the standard cluster-autoscaler component runs unmodified against Talos-managed nodes and reacts to Pending pods that request accelerator resources. Bare-metal deployments do not exercise this path; there the requirement is satisfied by the ability to scale worker MachineSets via Omni's declarative cluster template. On-premises operators can use Cluster API + Talos providers for equivalent behavior."
     - id: pod_autoscaling
       description: "If the platform supports the HorizontalPodAutoscaler, it must function correctly for pods utilizing accelerators."
       level: MUST
@@ -115,6 +116,7 @@ spec:
         - "secure_accelerator_access.md"
         - "junit.xml"
         - "e2e.log"
+        - "results.json"
       notes: "Verified by the manual attestation document and by the upstream AI Conformance test suite (TestSecureAcceleratorAccess) in DRA allocation mode against an NVIDIA GB10 GPU. Both positive-access and negative-isolation sub-tests pass."
     - id: workload_sandboxing
       description: "Provide a mechanism to run workloads in a sandbox that provides strong isolation from the host node kernel."
