@@ -425,3 +425,34 @@ func TestCheckArtifactEvidence_ParseErrorReportedOnce(t *testing.T) {
 		t.Errorf("second reference to unparseable artifact should be silent, got %v", errs)
 	}
 }
+
+func TestCheckRequirementStatus(t *testing.T) {
+	tests := []struct {
+		name          string
+		level, status string
+		notes         string
+		wantErrs      int
+		wantWarnings  int
+	}{
+		{"MUST implemented", "MUST", "Implemented", "", 0, 0},
+		{"MUST N/A with notes", "MUST", "N/A", "ships no cluster autoscaler", 0, 1},
+		{"MUST N/A without notes", "MUST", "N/A", "", 1, 1},
+		{"MUST not implemented", "MUST", "Not Implemented", "", 1, 0},
+		{"MUST partially implemented", "MUST", "Partially Implemented", "", 1, 0},
+		{"MUST invalid status", "MUST", "Done", "", 2, 0},
+		{"SHOULD not implemented", "SHOULD", "Not Implemented", "", 0, 0},
+		{"SHOULD N/A with notes", "SHOULD", "N/A", "no such hardware", 0, 0},
+		{"SHOULD N/A without notes", "SHOULD", "N/A", "", 1, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			errs, warnings := checkRequirementStatus("cluster_autoscaling", tc.level, tc.status, tc.notes)
+			if len(errs) != tc.wantErrs {
+				t.Errorf("errors=%v, want %d", errs, tc.wantErrs)
+			}
+			if len(warnings) != tc.wantWarnings {
+				t.Errorf("warnings=%v, want %d", warnings, tc.wantWarnings)
+			}
+		})
+	}
+}

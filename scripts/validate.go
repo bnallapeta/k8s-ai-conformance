@@ -475,6 +475,30 @@ func parseE2ELog(r io.Reader) (*artifactReport, error) {
 	return report, nil
 }
 
+// checkRequirementStatus validates a requirement's status against its level.
+// A MUST requirement has to be Implemented, or N/A when its condition does not
+// apply to the platform (for example a distribution that ships no cluster
+// autoscaler). N/A always needs a justification in notes, and on a MUST
+// requirement it is additionally flagged as a warning for reviewer attention.
+func checkRequirementStatus(id, level, status, notes string) (errs, warnings []string) {
+	if !validStatuses[status] {
+		errs = append(errs, fmt.Sprintf("Invalid status '%s' for '%s'. Must be one of %v", status, id, keys(validStatuses)))
+	}
+	if level == "MUST" {
+		switch status {
+		case "Implemented":
+		case "N/A":
+			warnings = append(warnings, fmt.Sprintf("Requirement '%s' is MUST level and marked N/A; review the justification in notes", id))
+		default:
+			errs = append(errs, fmt.Sprintf("Requirement '%s' is MUST level but status is '%s'. It must be 'Implemented', or 'N/A' with a justification in notes.", id, status))
+		}
+	}
+	if status == "N/A" && notes == "" {
+		errs = append(errs, fmt.Sprintf("Notes required for '%s' when status is N/A", id))
+	}
+	return errs, warnings
+}
+
 // checkArtifactEvidence inspects a referenced test artifact for the given
 // requirement. Any failing test in the artifact is an error. The test to
 // check is the explicit #fragment if present, otherwise the upstream test
@@ -706,21 +730,12 @@ func validateProduct(path string, cncfMembers map[string]bool) bool {
 					continue
 				}
 
-				// Check Status
-				if !validStatuses[pReq.Status] {
-					addError(fmt.Sprintf("Invalid status '%s' for '%s'. Must be one of %v", pReq.Status, sReq.ID, keys(validStatuses)))
+				errs, warns := checkRequirementStatus(sReq.ID, sReq.Level, pReq.Status, pReq.Notes)
+				for _, e := range errs {
+					addError(e)
 				}
-
-				// Check MUST level
-				if sReq.Level == "MUST" {
-					if pReq.Status != "Implemented" {
-						addError(fmt.Sprintf("Requirement '%s' is MUST level but status is '%s'. It must be 'Implemented'.", sReq.ID, pReq.Status))
-					}
-				}
-
-				// Check N/A notes
-				if pReq.Status == "N/A" && pReq.Notes == "" {
-					addError(fmt.Sprintf("Notes required for '%s' when status is N/A", sReq.ID))
+				for _, w := range warns {
+					addWarning(w)
 				}
 
 				// Validate Evidence Links
