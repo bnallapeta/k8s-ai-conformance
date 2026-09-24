@@ -429,24 +429,28 @@ func TestCheckArtifactEvidence_ParseErrorReportedOnce(t *testing.T) {
 func TestCheckRequirementStatus(t *testing.T) {
 	tests := []struct {
 		name          string
+		id            string
 		level, status string
 		notes         string
 		wantErrs      int
 		wantWarnings  int
 	}{
-		{"MUST implemented", "MUST", "Implemented", "", 0, 0},
-		{"MUST N/A with notes", "MUST", "N/A", "ships no cluster autoscaler", 0, 1},
-		{"MUST N/A without notes", "MUST", "N/A", "", 1, 1},
-		{"MUST not implemented", "MUST", "Not Implemented", "", 1, 0},
-		{"MUST partially implemented", "MUST", "Partially Implemented", "", 1, 0},
-		{"MUST invalid status", "MUST", "Done", "", 2, 0},
-		{"SHOULD not implemented", "SHOULD", "Not Implemented", "", 0, 0},
-		{"SHOULD N/A with notes", "SHOULD", "N/A", "no such hardware", 0, 0},
-		{"SHOULD N/A without notes", "SHOULD", "N/A", "", 1, 0},
+		{"MUST implemented", "secure_accelerator_access", "MUST", "Implemented", "", 0, 0},
+		{"conditional MUST N/A with notes", "cluster_autoscaling", "MUST", "N/A", "ships no cluster autoscaler", 0, 1},
+		{"conditional MUST N/A without notes", "cluster_autoscaling", "MUST", "N/A", "", 1, 1},
+		{"conditional MUST N/A with whitespace notes", "cluster_autoscaling", "MUST", "N/A", "  \n", 1, 1},
+		{"unconditional MUST N/A with notes", "secure_accelerator_access", "MUST", "N/A", "not applicable", 1, 0},
+		{"MUST not implemented", "secure_accelerator_access", "MUST", "Not Implemented", "", 1, 0},
+		{"MUST partially implemented", "secure_accelerator_access", "MUST", "Partially Implemented", "", 1, 0},
+		{"conditional MUST not implemented", "cluster_autoscaling", "MUST", "Not Implemented", "", 1, 0},
+		{"MUST invalid status", "secure_accelerator_access", "MUST", "Done", "", 2, 0},
+		{"SHOULD not implemented", "dra_support", "SHOULD", "Not Implemented", "", 0, 0},
+		{"SHOULD N/A with notes", "dra_support", "SHOULD", "N/A", "no such hardware", 0, 0},
+		{"SHOULD N/A without notes", "dra_support", "SHOULD", "N/A", "", 1, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			errs, warnings := checkRequirementStatus("cluster_autoscaling", tc.level, tc.status, tc.notes)
+			errs, warnings := checkRequirementStatus(tc.id, tc.level, tc.status, tc.notes)
 			if len(errs) != tc.wantErrs {
 				t.Errorf("errors=%v, want %d", errs, tc.wantErrs)
 			}

@@ -155,6 +155,13 @@ var autoTestedRequirements = map[string]string{
 	"cluster_autoscaling":       "TestAcceleratorClusterAutoscaling",
 }
 
+// conditionalMustRequirements lists the MUST requirements whose condition may
+// not apply to a platform, and which may therefore be marked N/A with a
+// justification in notes. Every other MUST requirement has to be Implemented.
+var conditionalMustRequirements = map[string]bool{
+	"cluster_autoscaling": true,
+}
+
 // hybridVerificationMinMinor is the first Kubernetes 1.x minor version for
 // which hybrid verification (automated test artifacts) applies.
 const hybridVerificationMinMinor = 37
@@ -476,24 +483,25 @@ func parseE2ELog(r io.Reader) (*artifactReport, error) {
 }
 
 // checkRequirementStatus validates a requirement's status against its level.
-// A MUST requirement has to be Implemented, or N/A when its condition does not
-// apply to the platform (for example a distribution that ships no cluster
-// autoscaler). N/A always needs a justification in notes, and on a MUST
-// requirement it is additionally flagged as a warning for reviewer attention.
+// A MUST requirement has to be Implemented. The conditional MUST requirements
+// in conditionalMustRequirements may instead be N/A; that is flagged as a
+// warning so the reviewer checks the justification. N/A always needs notes.
 func checkRequirementStatus(id, level, status, notes string) (errs, warnings []string) {
 	if !validStatuses[status] {
 		errs = append(errs, fmt.Sprintf("Invalid status '%s' for '%s'. Must be one of %v", status, id, keys(validStatuses)))
 	}
 	if level == "MUST" {
-		switch status {
-		case "Implemented":
-		case "N/A":
+		switch {
+		case status == "Implemented":
+		case status == "N/A" && conditionalMustRequirements[id]:
 			warnings = append(warnings, fmt.Sprintf("Requirement '%s' is MUST level and marked N/A; review the justification in notes", id))
-		default:
+		case conditionalMustRequirements[id]:
 			errs = append(errs, fmt.Sprintf("Requirement '%s' is MUST level but status is '%s'. It must be 'Implemented', or 'N/A' with a justification in notes.", id, status))
+		default:
+			errs = append(errs, fmt.Sprintf("Requirement '%s' is MUST level but status is '%s'. It must be 'Implemented'.", id, status))
 		}
 	}
-	if status == "N/A" && notes == "" {
+	if status == "N/A" && strings.TrimSpace(notes) == "" {
 		errs = append(errs, fmt.Sprintf("Notes required for '%s' when status is N/A", id))
 	}
 	return errs, warnings
